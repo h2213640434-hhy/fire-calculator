@@ -574,6 +574,7 @@ function getRequiredSavings(stopAge) {
 }
 
 function getNetMonthly(stopAge) {
+  const currentAge = getVal('currentAge');
   const monthlyExpense = getVal('monthlyExpense');
   const ssMonthly = getVal('ssMonthly');
   const partTimeMonthly = getVal('partTimeIncome') / 12;
