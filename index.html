@@ -466,6 +466,10 @@ function displayResult(stopAge, result, isLastResort = false) {
   const retireYears = pensionAge - stopAge;
   const monthlyExpense = getVal('monthlyExpense');
   const ssMonthly = getVal('ssMonthly');
+  const ssTotalYears = getVal('ssTotalYears');
+  const ssPaidYears = getVal('ssPaidYears');
+  const ssRemainingYears = Math.max(0, ssTotalYears - ssPaidYears);
+  const ssEndAge = currentAge + ssRemainingYears;
   const partTimeAnnual = getVal('partTimeIncome');
 
   // 伴侣社保
