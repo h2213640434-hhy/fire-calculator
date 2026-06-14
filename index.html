@@ -81,7 +81,7 @@ canvas { width: 100% !important; height: 100% !important; }
     <div class="form-grid">
       <div class="form-group">
         <label>当前年龄</label>
-        <input type="number" id="currentAge" value="26" min="18" max="70">
+        <input type="number" id="currentAge" value="26" min="18" max="70" onchange="updateUserSSSummary()">
       </div>
       <div class="form-group">
         <label>当前存款（元）</label>
@@ -131,15 +131,15 @@ canvas { width: 100% !important; height: 100% !important; }
       </div>
       <div class="form-group">
         <label>社保需交满年数</label>
-        <input type="number" id="ssTotalYears" value="20">
+        <input type="number" id="ssTotalYears" value="20" onchange="updateUserSSSummary()">
       </div>
       <div class="form-group">
         <label>已交社保年数</label>
-        <input type="number" id="ssPaidYears" value="4">
+        <input type="number" id="ssPaidYears" value="4" onchange="updateUserSSSummary()">
       </div>
       <div class="form-group">
-        <label>当前年龄（社保计算用）</label>
-        <input type="number" id="ssStartAge" value="22" title="开始交社保的年龄">
+        <label>剩余需缴年限（自动计算）</label>
+        <input type="number" id="ssRemainingYears" value="16" readonly style="opacity:0.7;cursor:not-allowed;" title="= 社保年限 - 已缴纳年限">
       </div>
     </div>
   </div>
@@ -269,6 +269,15 @@ function togglePartnerSS() {
   document.getElementById('partnerSSSummary').classList.toggle('hidden', !checked);
   if (checked) updatePartnerSSSummary();
 }
+function updateUserSSSummary() {
+  const currentAge = parseFloat(document.getElementById('currentAge').value) || 26;
+  const ssTotalYears = parseFloat(document.getElementById('ssTotalYears').value) || 20;
+  const ssPaidYears = parseFloat(document.getElementById('ssPaidYears').value) || 0;
+  const remaining = Math.max(0, ssTotalYears - ssPaidYears);
+  const endAge = currentAge + remaining;
+  document.getElementById('ssRemainingYears').value = remaining;
+}
+
 function updatePartnerSSSummary() {
   const partnerAge = parseFloat(document.getElementById('partnerAge').value) || 25;
   const partnerSSPaid = parseFloat(document.getElementById('partnerSSPaid').value) || 0;
@@ -306,8 +315,8 @@ function calculate() {
   const ssMonthly = getVal('ssMonthly');
   const ssTotalYears = getVal('ssTotalYears');
   const ssPaidYears = getVal('ssPaidYears');
-  const ssStartAge = getVal('ssStartAge');
-  const ssEndAge = ssStartAge + ssTotalYears;
+  const ssRemainingYears = Math.max(0, ssTotalYears - ssPaidYears);
+  const ssEndAge = currentAge + ssRemainingYears;
 
   const hasPartner = getChecked('hasPartner');
   const partnerAge = getVal('partnerAge');
@@ -404,7 +413,7 @@ function calculate() {
       if (hasChild && age === childBirthAge + 6) events.push('📚 小学');
       if (hasChild && age === childBirthAge + 12) events.push('📚 初中');
       if (hasChild && age === childBirthAge + childEndAge) events.push('🎓 养娃到' + childEndAge + '岁结束');
-      if (age === ssEndAge) events.push('✅ 社保交满');
+      if (age === ssEndAge) events.push('✅ ' + age + '岁社保交满（还需' + ssRemainingYears + '年）');
       if (partnerSSMonthly > 0 && age === partnerSSEndAge) events.push('✅ 伴侣' + partnerSSFinishAge + '岁社保交满');
 
       yearlyData.push({
@@ -492,6 +501,7 @@ function displayResult(stopAge, result, isLastResort = false) {
   if (result.ok) {
     summary = `
       <p>✅ <strong>${stopAge}岁</strong>可以停止全职工作（躺平），工作<strong>${workYears}年</strong>，攒下<strong>${formatMoney(savingsAtStop)}</strong>。</p>
+       ${ssMonthly > 0 ? '<p>🏥 社保：已交<strong>' + ssPaidYears + '</strong>年，还需<strong>' + ssRemainingYears + '</strong>年，<strong>' + ssEndAge + '</strong>岁交满。</p>' : ''}
       <p>躺平后月净支出 <strong>${formatMoney(getNetMonthly(stopAge))}</strong>（生活费${formatMoney(monthlyExpense)}${ssMonthly > 0 ? ' + 社保' + formatMoney(ssMonthly) : ''}${partnerSSMonthly > 0 ? ' + 伴侣社保' + formatMoney(partnerSSMonthly) : ''} - 兼职${formatMoney(partTimeAnnual/12)}/月）。</p>
       <p>从${stopAge}岁撑到${pensionAge}岁领养老金，需要${retireYears}年。届时还剩 <strong>${formatMoney(result.balance)}</strong>。</p>
       ${result.balance < 100000 ? '<p>⚠️ 余额较少，建议多工作1-2年增加安全垫。</p>' : ''}
@@ -567,9 +577,10 @@ function getNetMonthly(stopAge) {
   const monthlyExpense = getVal('monthlyExpense');
   const ssMonthly = getVal('ssMonthly');
   const partTimeMonthly = getVal('partTimeIncome') / 12;
-  const ssStartAge = getVal('ssStartAge');
   const ssTotalYears = getVal('ssTotalYears');
-  const ssEndAge = ssStartAge + ssTotalYears;
+  const ssPaidYears = getVal('ssPaidYears');
+  const ssRemainingYears = Math.max(0, ssTotalYears - ssPaidYears);
+  const ssEndAge = currentAge + ssRemainingYears;
 
   // 伴侣社保
   const partnerHasSS = getChecked('partnerHasSS');
@@ -721,6 +732,7 @@ function drawChart(stopAge, result) {
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
   // 自动计算
+  updateUserSSSummary();
 });
 </script>
 </body>
