@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FIRE 躺平计算器</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f1a; color: #e0e0e0; min-height: 100vh; }
+.container { max-width: 900px; margin: 0 auto; padding: 20px; }
+h1 { text-align: center; padding: 30px 0 10px; font-size: 28px; background: linear-gradient(135deg, #00d2ff, #7b2ff7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.subtitle { text-align: center; color: #888; margin-bottom: 30px; font-size: 14px; }
+
+.section { background: #1a1a2e; border-radius: 12px; padding: 24px; margin-bottom: 16px; border: 1px solid #2a2a4a; }
+.section-title { font-size: 16px; font-weight: 600; color: #7b2ff7; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.section-title::before { content: ''; width: 4px; height: 18px; background: #7b2ff7; border-radius: 2px; }
+
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; }
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-group.full { grid-column: 1 / -1; }
+label { font-size: 13px; color: #aaa; }
+input, select { background: #16162b; border: 1px solid #3a3a5a; border-radius: 8px; padding: 10px 12px; color: #e0e0e0; font-size: 14px; outline: none; transition: border-color 0.2s; }
+input:focus, select:focus { border-color: #7b2ff7; }
+input[type="number"] { -moz-appearance: textfield; }
+input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+.checkbox-group { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
+.checkbox-group input[type="checkbox"] { width: 18px; height: 18px; accent-color: #7b2ff7; cursor: pointer; }
+.checkbox-group label { font-size: 14px; cursor: pointer; color: #e0e0e0; }
+
+.btn { background: linear-gradient(135deg, #7b2ff7, #00d2ff); color: white; border: none; padding: 14px 40px; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; display: block; margin: 24px auto; transition: transform 0.2s, box-shadow 0.2s; }
+.btn:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(123, 47, 247, 0.3); }
+.btn:active { transform: translateY(0); }
+
+.hidden { display: none !important; }
+
+.result-section { background: linear-gradient(135deg, #1a1a2e, #16213e); border: 1px solid #2a2a6a; }
+.result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+.result-card { background: #0f0f1a; border-radius: 10px; padding: 16px; text-align: center; border: 1px solid #2a2a4a; }
+.result-card .value { font-size: 28px; font-weight: 700; margin: 8px 0 4px; }
+.result-card .label { font-size: 12px; color: #888; }
+.result-card.success .value { color: #00e676; }
+.result-card.fail .value { color: #ff5252; }
+.result-card.info .value { color: #00d2ff; }
+
+.chart-container { width: 100%; height: 300px; position: relative; margin: 20px 0; }
+canvas { width: 100% !important; height: 100% !important; }
+
+.yearly-table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
+.yearly-table th { background: #16162b; padding: 10px 8px; text-align: center; color: #aaa; font-weight: 500; position: sticky; top: 0; }
+.yearly-table td { padding: 8px; text-align: center; border-bottom: 1px solid #1f1f3a; }
+.yearly-table tr:hover { background: #1a1a3a; }
+.yearly-table .positive { color: #00e676; }
+.yearly-table .negative { color: #ff5252; }
+.yearly-table .highlight { background: #1a1a3a; font-weight: 600; }
+
+.table-wrap { max-height: 400px; overflow-y: auto; border-radius: 8px; border: 1px solid #2a2a4a; }
+.table-wrap::-webkit-scrollbar { width: 6px; }
+.table-wrap::-webkit-scrollbar-track { background: #1a1a2e; }
+.table-wrap::-webkit-scrollbar-thumb { background: #3a3a5a; border-radius: 3px; }
+
+.summary-text { background: #0f0f1a; border-radius: 10px; padding: 20px; margin: 16px 0; border-left: 4px solid #7b2ff7; line-height: 1.8; font-size: 14px; }
+.summary-text strong { color: #00d2ff; }
+
+@media (max-width: 600px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .result-grid { grid-template-columns: 1fr; }
+  .container { padding: 12px; }
+  h1 { font-size: 22px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🔥 FIRE 躺平计算器</h1>
+  <p class="subtitle">计算你需要工作到几岁，才能停止全职工作，靠存款撑到领养老金</p>
+
+  <!-- 基本信息 -->
+  <div class="section">
+    <div class="section-title">👤 基本信息</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>当前年龄</label>
+        <input type="number" id="currentAge" value="26" min="18" max="70">
+      </div>
+      <div class="form-group">
+        <label>当前存款（元）</label>
+        <input type="number" id="currentSavings" value="200000">
+      </div>
+      <div class="form-group">
+        <label>工作时每月存入（元）</label>
+        <input type="number" id="monthlySave" value="8000">
+      </div>
+      <div class="form-group">
+        <label>年化投资收益率（%）</label>
+        <input type="number" id="annualReturn" value="2" step="0.1" min="0" max="20">
+      </div>
+    </div>
+  </div>
+
+  <!-- 退休后生活 -->
+  <div class="section">
+    <div class="section-title">🏠 躺平后生活</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>躺平后每月生活费（元）</label>
+        <input type="number" id="monthlyExpense" value="3000">
+      </div>
+      <div class="form-group">
+        <label>目标躺平年龄（留空=自动计算最早能躺平的年龄）</label>
+        <input type="number" id="targetAge" placeholder="如35，留空自动算最早">
+      </div>
+      <div class="form-group">
+        <label>躺平后每年兼职收入（元）</label>
+        <input type="number" id="partTimeIncome" value="0">
+      </div>
+      <div class="form-group">
+        <label>领养老金（退休）年龄</label>
+        <input type="number" id="pensionAge" value="65">
+      </div>
+    </div>
+  </div>
+
+  <!-- 社保 -->
+  <div class="section">
+    <div class="section-title">🏥 社保</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>灵活就业社保月缴（元，0=不交）</label>
+        <input type="number" id="ssMonthly" value="900">
+      </div>
+      <div class="form-group">
+        <label>社保需交满年数</label>
+        <input type="number" id="ssTotalYears" value="20">
+      </div>
+      <div class="form-group">
+        <label>已交社保年数</label>
+        <input type="number" id="ssPaidYears" value="4">
+      </div>
+      <div class="form-group">
+        <label>当前年龄（社保计算用）</label>
+        <input type="number" id="ssStartAge" value="22" title="开始交社保的年龄">
+      </div>
+    </div>
+  </div>
+
+  <!-- 伴侣 -->
+  <div class="section">
+    <div class="section-title">💑 伴侣（可选）</div>
+    <div class="checkbox-group">
+      <input type="checkbox" id="hasPartner" onchange="togglePartner()">
+      <label for="hasPartner">有伴侣，两人一起计算</label>
+    </div>
+    <div id="partnerFields" class="form-grid hidden">
+      <div class="form-group">
+        <label>伴侣年龄</label>
+        <input type="number" id="partnerAge" value="25" min="18" max="70">
+      </div>
+      <div class="form-group">
+        <div class="checkbox-group" style="padding-top:4px">
+          <input type="checkbox" id="partnerHasSS" onchange="togglePartnerSS()">
+          <label for="partnerHasSS">伴侣也交社保</label>
+        </div>
+      </div>
+      <div id="partnerSSDetail" class="form-group hidden">
+        <label>伴侣社保月缴（元）</label>
+        <input type="number" id="partnerSSMonthly" value="900" min="0" onchange="updatePartnerSSSummary()">
+      </div>
+      <div id="partnerSSDetail2" class="form-grid hidden" style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:12px 20px;">
+        <div class="form-group">
+          <label>伴侣已交社保年数</label>
+          <input type="number" id="partnerSSPaid" value="0" min="0" onchange="updatePartnerSSSummary()">
+        </div>
+        <div class="form-group">
+          <label>伴侣社保需交满年数</label>
+          <input type="number" id="partnerSSTotal" value="20" min="0" onchange="updatePartnerSSSummary()">
+        </div>
+      </div>
+      <div id="partnerSSSummary" class="form-group hidden" style="grid-column:1/-1;">
+        <div id="partnerSSSummaryText" style="background:#0f0f1a;border-radius:8px;padding:12px;font-size:13px;color:#aaa;border-left:3px solid #00d2ff;line-height:1.8;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 孩子 -->
+  <div class="section">
+    <div class="section-title">👶 孩子（可选）</div>
+    <div class="checkbox-group">
+      <input type="checkbox" id="hasChild" onchange="toggleChild()">
+      <label for="hasChild">计划要孩子</label>
+    </div>
+    <div id="childFields" class="form-grid hidden">
+      <div class="form-group">
+        <label>几岁生孩子</label>
+        <input type="number" id="childBirthAge" value="30" min="20" max="50">
+      </div>
+      <div class="form-group">
+        <label>养娃到几岁（默认15岁=义务教育结束）</label>
+        <input type="number" id="childEndAge" value="15" min="1" max="30">
+      </div>
+      <div class="form-group">
+        <label>养娃总预算（元，参考用）</label>
+        <input type="number" id="childBudget" value="300000">
+      </div>
+      <div class="form-group">
+        <label>孩子每月额外开销（含在生活费外）</label>
+        <input type="number" id="childMonthly" value="1000" title="如果生活费已包含孩子开销填0">
+      </div>
+      <div class="form-group">
+        <label>生活费是否已包含孩子开销</label>
+        <select id="childIncluded">
+          <option value="1">是，生活费已包含</option>
+          <option value="0">否，孩子开销另算</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn" onclick="calculate()">🚀 计算能否躺平</button>
+
+  <!-- 结果 -->
+  <div id="resultArea" class="hidden">
+    <div class="section result-section">
+      <div class="section-title">📊 计算结果</div>
+      <div id="resultCards" class="result-grid"></div>
+      <div id="summaryText" class="summary-text"></div>
+    </div>
+
+    <div class="section result-section">
+      <div class="section-title">📈 余额变化曲线</div>
+      <div class="chart-container">
+        <canvas id="balanceChart"></canvas>
+      </div>
+    </div>
+
+    <div class="section result-section">
+      <div class="section-title">📋 逐年明细</div>
+      <div class="table-wrap">
+        <table class="yearly-table">
+          <thead>
+            <tr>
+              <th>年龄</th>
+              <th>年份</th>
+              <th>年初余额</th>
+              <th>年收入</th>
+              <th>年支出</th>
+              <th>年末余额</th>
+              <th>事件</th>
+            </tr>
+          </thead>
+          <tbody id="yearlyBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function togglePartner() {
+  document.getElementById('partnerFields').classList.toggle('hidden', !document.getElementById('hasPartner').checked);
+}
+function toggleChild() {
+  document.getElementById('childFields').classList.toggle('hidden', !document.getElementById('hasChild').checked);
+}
+function togglePartnerSS() {
+  const checked = document.getElementById('partnerHasSS').checked;
+  document.getElementById('partnerSSDetail').classList.toggle('hidden', !checked);
+  document.getElementById('partnerSSDetail2').classList.toggle('hidden', !checked);
+  document.getElementById('partnerSSSummary').classList.toggle('hidden', !checked);
+  if (checked) updatePartnerSSSummary();
+}
+function updatePartnerSSSummary() {
+  const partnerAge = parseFloat(document.getElementById('partnerAge').value) || 25;
+  const partnerSSPaid = parseFloat(document.getElementById('partnerSSPaid').value) || 0;
+  const partnerSSTotal = parseFloat(document.getElementById('partnerSSTotal').value) || 20;
+  const partnerSSMonthly = parseFloat(document.getElementById('partnerSSMonthly').value) || 0;
+  const remainingYears = Math.max(0, partnerSSTotal - partnerSSPaid);
+  const partnerSSStartAge = partnerAge - partnerSSPaid;
+  const partnerSSFinishAge = partnerSSStartAge + partnerSSTotal;
+  const totalCost = remainingYears * 12 * partnerSSMonthly;
+  const el = document.getElementById('partnerSSSummaryText');
+  if (remainingYears <= 0) {
+    el.innerHTML = '✅ 伴侣社保已交满 ' + partnerSSTotal + ' 年，无需再缴';
+  } else {
+    el.innerHTML = '📊 伴侣社保计算：<br>' +
+      '已交 <strong>' + partnerSSPaid + '</strong> 年，还需 <strong>' + remainingYears + '</strong> 年（<strong>' + partnerSSFinishAge + '</strong> 岁交满）<br>' +
+      '每月需缴 <strong>' + partnerSSMonthly.toLocaleString() + '</strong> 元 × ' + (remainingYears * 12) + ' 个月 = 总计约 <strong>' + (totalCost / 10000).toFixed(1) + '</strong> 万元';
+  }
+}
+
+function getVal(id) { return parseFloat(document.getElementById(id).value) || 0; }
+function getChecked(id) { return document.getElementById(id).checked; }
+
+function calculate() {
+  // 获取参数
+  const currentAge = getVal('currentAge');
+  const currentSavings = getVal('currentSavings');
+  const monthlySave = getVal('monthlySave');
+  const annualReturn = getVal('annualReturn') / 100;
+  const monthlyReturn = annualReturn / 12;
+  const monthlyExpense = getVal('monthlyExpense');
+  const targetAgeInput = getVal('targetAge');
+  const partTimeAnnual = getVal('partTimeIncome');
+  const partTimeMonthly = partTimeAnnual / 12;
+  const pensionAge = getVal('pensionAge');
+  const ssMonthly = getVal('ssMonthly');
+  const ssTotalYears = getVal('ssTotalYears');
+  const ssPaidYears = getVal('ssPaidYears');
+  const ssStartAge = getVal('ssStartAge');
+  const ssEndAge = ssStartAge + ssTotalYears;
+
+  const hasPartner = getChecked('hasPartner');
+  const partnerAge = getVal('partnerAge');
+  const partnerHasSS = getChecked('partnerHasSS');
+  const partnerSSMonthly = partnerHasSS ? getVal('partnerSSMonthly') : 0;
+  const partnerSSTotal = getVal('partnerSSTotal');
+  const partnerSSPaid = getVal('partnerSSPaid');
+  const partnerAgeDiff = currentAge - partnerAge;
+  const partnerSSRemaining = Math.max(0, partnerSSTotal - partnerSSPaid);
+  const partnerSSStartAge = partnerAge - partnerSSPaid; // 伴侣开始交社保的年龄
+  const partnerSSFinishAge = partnerSSStartAge + partnerSSTotal; // 伴侣实际几岁交满
+  const partnerSSEndAge = partnerSSFinishAge + partnerAgeDiff; // 转换到你的时间轴
+
+  const hasChild = getChecked('hasChild');
+  const childBirthAge = getVal('childBirthAge');
+  const childEndAge = getVal('childEndAge');
+  const childBudget = getVal('childBudget');
+  const childMonthly = getVal('childMonthly');
+  const childIncluded = getVal('childIncluded');
+
+  // 计算养娃每月分摊（从出生到childEndAge岁）
+  let childMonthlyCost = 0;
+  if (hasChild && childIncluded == 0) {
+    childMonthlyCost = childMonthly;
+  }
+
+  // 伴侣社保费用单独计算
+
+  // 核心计算函数：给定停止年龄，模拟到领养老金年龄
+  function simulate(stopAge) {
+    let balance = currentSavings;
+    let monthlyData = [];
+    let yearlyData = [];
+    let ok = true;
+    let exhaustedAge = null;
+
+    // 阶段1：工作积累期
+    for (let m = 0; m < (stopAge - currentAge) * 12; m++) {
+      balance = balance * (1 + monthlyReturn) + monthlySave;
+    }
+
+    // 阶段2：退休期（stopAge → pensionAge）
+    for (let age = stopAge; age < pensionAge; age++) {
+      let yearStart = balance;
+      let yearIncome = 0;
+      let yearExpense = 0;
+      let events = [];
+
+      for (let m = 0; m < 12; m++) {
+        let ageNow = age + m / 12;
+
+        // 收入
+        let income = partTimeMonthly;
+        yearIncome += income;
+
+        // 支出
+        let expense = monthlyExpense;
+
+        // 社保
+        let ss = 0;
+        if (ssMonthly > 0 && ageNow < ssEndAge) {
+          ss = ssMonthly;
+        }
+
+        // 伴侣社保
+        let partnerSSCost = 0;
+        if (partnerSSMonthly > 0 && ageNow < partnerSSEndAge) {
+          partnerSSCost = partnerSSMonthly;
+        }
+
+        // 孩子额外开销
+        let childExtra = 0;
+        if (hasChild && ageNow >= childBirthAge && ageNow < childBirthAge + childEndAge) {
+          childExtra = childMonthlyCost;
+        }
+
+        let totalExpense = expense + ss + partnerSSCost + childExtra;
+        yearExpense += totalExpense;
+
+        balance = balance + income - totalExpense;
+        balance = balance * (1 + monthlyReturn);
+
+        if (balance < 0) {
+          ok = false;
+          exhaustedAge = age;
+          balance = 0;
+          break;
+        }
+      }
+
+      // 事件标记
+      if (age === stopAge) events.push('🏖️ 躺平');
+      if (hasChild && age === childBirthAge) events.push('👶 孩子出生');
+      if (hasChild && age === childBirthAge + 6) events.push('📚 小学');
+      if (hasChild && age === childBirthAge + 12) events.push('📚 初中');
+      if (hasChild && age === childBirthAge + childEndAge) events.push('🎓 养娃到' + childEndAge + '岁结束');
+      if (age === ssEndAge) events.push('✅ 社保交满');
+      if (partnerSSMonthly > 0 && age === partnerSSEndAge) events.push('✅ 伴侣' + partnerSSFinishAge + '岁社保交满');
+
+      yearlyData.push({
+        age: age,
+        phase: '退休',
+        yearStart: yearStart,
+        yearIncome: yearIncome,
+        yearExpense: yearExpense,
+        yearEnd: balance,
+        events: events.join(' ')
+      });
+
+      if (!ok) break;
+    }
+
+    return { ok, balance, exhaustedAge, yearlyData, finalBalance: balance };
+  }
+
+  // 如果指定了目标年龄
+  if (targetAgeInput > 0) {
+    let result = simulate(targetAgeInput);
+    displayResult(targetAgeInput, result);
+    return;
+  }
+
+  // 自动计算最早退休年龄
+  let found = false;
+  for (let age = currentAge + 1; age < pensionAge; age++) {
+    let result = simulate(age);
+    if (result.ok && result.balance > 0) {
+      displayResult(age, result);
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    // 显示最接近的结果
+    let lastResult = simulate(pensionAge - 1);
+    displayResult(pensionAge - 1, lastResult, true);
+  }
+}
+
+function displayResult(stopAge, result, isLastResort = false) {
+  document.getElementById('resultArea').classList.remove('hidden');
+
+  const currentAge = getVal('currentAge');
+  const pensionAge = getVal('pensionAge');
+  const workYears = stopAge - currentAge;
+  const retireYears = pensionAge - stopAge;
+  const monthlyExpense = getVal('monthlyExpense');
+  const ssMonthly = getVal('ssMonthly');
+  const partTimeAnnual = getVal('partTimeIncome');
+
+  // 伴侣社保
+  const partnerHasSS = getChecked('partnerHasSS');
+  const partnerSSMonthly = partnerHasSS ? getVal('partnerSSMonthly') : 0;
+
+  // 结果卡片
+  const savingsAtStop = getRequiredSavings(stopAge);
+  const cardsHtml = `
+    <div class="result-card ${result.ok ? 'success' : 'fail'}">
+      <div class="label">${result.ok ? '✅ 最早可躺平年龄' : '❌ 目标躺平年龄'}</div>
+      <div class="value">${stopAge}岁</div>
+      <div class="label">需再工作 ${workYears} 年</div>
+    </div>
+    <div class="result-card info">
+      <div class="label">躺平时存款</div>
+     <div class="value">${formatMoney(savingsAtStop)}</div>
+     <div class="label">月净支出 ${formatMoney(getNetMonthly(stopAge))}</div>
+    </div>
+    <div class="result-card ${result.balance > 0 ? 'success' : 'fail'}">
+      <div class="label">${pensionAge}岁领养老金时余额</div>
+      <div class="value">${formatMoney(result.balance)}</div>
+      <div class="label">${result.ok ? '✅ 能撑到领养老金' : '❌ ' + result.exhaustedAge + '岁花光'}</div>
+    </div>
+    <div class="result-card info">
+      <div class="label">需撑年数</div>
+      <div class="value">${retireYears}年</div>
+      <div class="label">${stopAge}岁→${pensionAge}岁</div>
+    </div>
+  `;
+  // 摘要文字
+  let summary = '';
+  if (result.ok) {
+    summary = `
+      <p>✅ <strong>${stopAge}岁</strong>可以停止全职工作（躺平），工作<strong>${workYears}年</strong>，攒下<strong>${formatMoney(savingsAtStop)}</strong>。</p>
+      <p>躺平后月净支出 <strong>${formatMoney(getNetMonthly(stopAge))}</strong>（生活费${formatMoney(monthlyExpense)}${ssMonthly > 0 ? ' + 社保' + formatMoney(ssMonthly) : ''}${partnerSSMonthly > 0 ? ' + 伴侣社保' + formatMoney(partnerSSMonthly) : ''} - 兼职${formatMoney(partTimeAnnual/12)}/月）。</p>
+      <p>从${stopAge}岁撑到${pensionAge}岁领养老金，需要${retireYears}年。届时还剩 <strong>${formatMoney(result.balance)}</strong>。</p>
+      ${result.balance < 100000 ? '<p>⚠️ 余额较少，建议多工作1-2年增加安全垫。</p>' : ''}
+    `;
+  } else {
+    summary = `
+      <p>❌ 按当前参数，<strong>${stopAge}岁</strong>停止全职工作后，无法撑到${pensionAge}岁领养老金。</p>
+      <p>资金将在 <strong>${result.exhaustedAge}岁</strong> 耗尽，距离领养老金还差 <strong>${pensionAge - result.exhaustedAge}年</strong>。</p>
+      <p>💡 建议：延迟躺平年龄、降低生活费、增加兼职收入、或提高投资收益率。</p>
+    `;
+  }
+  document.getElementById('resultCards').innerHTML = cardsHtml;
+  document.getElementById('summaryText').innerHTML = summary;
+
+  // 逐年表格
+  let tbody = '';
+  let storeSavings = getVal('currentSavings');
+  let monthlySave = getVal('monthlySave');
+  let annualReturn = getVal('annualReturn') / 100;
+  let monthlyReturn = annualReturn / 12;
+
+  // 工作期
+  for (let age = currentAge; age < stopAge; age++) {
+    let yearStart = storeSavings;
+    for (let m = 0; m < 12; m++) {
+      storeSavings = storeSavings * (1 + monthlyReturn) + monthlySave;
+    }
+    tbody += `<tr class="highlight">
+      <td>${age}岁</td><td>工作</td>
+      <td>${formatMoney(yearStart)}</td>
+      <td class="positive">+${formatMoney(monthlySave * 12)}</td>
+      <td>—</td>
+      <td>${formatMoney(storeSavings)}</td>
+      <td>💼 搞钱中</td>
+    </tr>`;
+  }
+
+  // 退休期
+  result.yearlyData.forEach(row => {
+    const cls = row.yearEnd < 100000 && row.yearEnd > 0 ? 'negative' : (row.yearEnd > 0 ? 'positive' : 'negative');
+    tbody += `<tr>
+      <td>${row.age}岁</td><td>躺平</td>
+      <td>${formatMoney(row.yearStart)}</td>
+      <td class="positive">${row.yearIncome > 0 ? '+' + formatMoney(row.yearIncome) : '—'}</td>
+      <td class="negative">-${formatMoney(row.yearExpense)}</td>
+      <td class="${cls}">${formatMoney(row.yearEnd)}</td>
+      <td>${row.events || '—'}</td>
+    </tr>`;
+  });
+
+  document.getElementById('yearlyBody').innerHTML = tbody;
+
+  // 绘制图表
+  drawChart(stopAge, result);
+
+  // 滚动到结果
+  document.getElementById('resultArea').scrollIntoView({ behavior: 'smooth' });
+}
+
+function getRequiredSavings(stopAge) {
+  const currentAge = getVal('currentAge');
+  const monthlySave = getVal('monthlySave');
+  const annualReturn = getVal('annualReturn') / 100;
+  const monthlyReturn = annualReturn / 12;
+  let total = getVal('currentSavings');
+  for (let m = 0; m < (stopAge - currentAge) * 12; m++) {
+    total = total * (1 + monthlyReturn) + monthlySave;
+  }
+  return total;
+}
+
+function getNetMonthly(stopAge) {
+  const monthlyExpense = getVal('monthlyExpense');
+  const ssMonthly = getVal('ssMonthly');
+  const partTimeMonthly = getVal('partTimeIncome') / 12;
+  const ssStartAge = getVal('ssStartAge');
+  const ssTotalYears = getVal('ssTotalYears');
+  const ssEndAge = ssStartAge + ssTotalYears;
+
+  // 伴侣社保
+  const partnerHasSS = getChecked('partnerHasSS');
+  const partnerSSMonthly = partnerHasSS ? getVal('partnerSSMonthly') : 0;
+  const partnerAge = getVal('partnerAge');
+  const partnerSSTotal = getVal('partnerSSTotal');
+  const partnerSSPaid = getVal('partnerSSPaid');
+  const partnerAgeDiff = currentAge - partnerAge;
+  const partnerSSRemaining = Math.max(0, partnerSSTotal - partnerSSPaid);
+  const partnerSSStartAge = partnerAge - partnerSSPaid;
+  const partnerSSFinishAge = partnerSSStartAge + partnerSSTotal;
+  const partnerSSEndAge = partnerSSFinishAge + partnerAgeDiff;
+
+  // 返回躺平初期的月净支出
+  let net = monthlyExpense - partTimeMonthly;
+  if (stopAge < ssEndAge) net += ssMonthly;
+  if (partnerHasSS && stopAge < partnerSSEndAge) net += partnerSSMonthly;
+  return net;
+}
+
+function formatMoney(n) {
+  if (n >= 10000) return (n / 10000).toFixed(1) + '万';
+  return n.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
+}
+
+function drawChart(stopAge, result) {
+  const canvas = document.getElementById('balanceChart');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = 300 * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = '300px';
+  ctx.scale(dpr, dpr);
+
+  const W = rect.width;
+  const H = 300;
+  const padding = { top: 30, right: 20, bottom: 40, left: 65 };
+  const chartW = W - padding.left - padding.right;
+  const chartH = H - padding.top - padding.bottom;
+
+  // 收集数据
+  const currentAge = getVal('currentAge');
+  const pensionAge = getVal('pensionAge');
+  const monthlySave = getVal('monthlySave');
+  const annualReturn = getVal('annualReturn') / 100;
+  const monthlyReturn = annualReturn / 12;
+
+  let data = [];
+  let balance = getVal('currentSavings');
+
+  // 工作期
+  for (let age = currentAge; age <= stopAge; age++) {
+    data.push({ age, balance, phase: 'work' });
+    for (let m = 0; m < 12; m++) {
+      balance = balance * (1 + monthlyReturn) + monthlySave;
+    }
+  }
+
+  // 退休期
+  result.yearlyData.forEach(row => {
+    data.push({ age: row.age, balance: row.yearEnd, phase: 'retire' });
+  });
+
+  // 缩放
+  const maxBalance = Math.max(...data.map(d => d.balance), 1);
+  const minAge = data[0].age;
+  const maxAge = data[data.length - 1].age;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // 网格
+  ctx.strokeStyle = '#2a2a4a';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 5; i++) {
+    let y = padding.top + chartH * i / 5;
+    ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(W - padding.right, y); ctx.stroke();
+    ctx.fillStyle = '#666';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(formatMoney(maxBalance * (1 - i / 5)), padding.left - 8, y + 4);
+  }
+
+  // X轴标签
+  ctx.fillStyle = '#666';
+  ctx.textAlign = 'center';
+  let step = Math.max(1, Math.floor((maxAge - minAge) / 8));
+  for (let age = minAge; age <= maxAge; age += step) {
+    let x = padding.left + (age - minAge) / (maxAge - minAge) * chartW;
+    ctx.fillText(age + '岁', x, H - 10);
+  }
+
+  // 工作期区域
+  let workEndX = padding.left + (stopAge - minAge) / (maxAge - minAge) * chartW;
+  ctx.fillStyle = 'rgba(123, 47, 247, 0.08)';
+  ctx.fillRect(padding.left, padding.top, workEndX - padding.left, chartH);
+  ctx.fillStyle = '#7b2ff7';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('💼 工作期', (padding.left + workEndX) / 2, padding.top - 8);
+
+  // 退休期区域
+  ctx.fillStyle = 'rgba(0, 210, 255, 0.05)';
+  ctx.fillRect(workEndX, padding.top, W - padding.right - workEndX, chartH);
+  ctx.fillStyle = '#00d2ff';
+  ctx.fillText('🏖️ 躺平期', (workEndX + W - padding.right) / 2, padding.top - 8);
+
+  // 退休线
+  ctx.strokeStyle = '#7b2ff7';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath(); ctx.moveTo(workEndX, padding.top); ctx.lineTo(workEndX, padding.top + chartH); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 绘制曲线
+  ctx.beginPath();
+  data.forEach((d, i) => {
+    let x = padding.left + (d.age - minAge) / (maxAge - minAge) * chartW;
+    let y = padding.top + chartH * (1 - d.balance / maxBalance);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#00d2ff';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // 渐变填充
+  const gradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartH);
+  gradient.addColorStop(0, 'rgba(0, 210, 255, 0.2)');
+  gradient.addColorStop(1, 'rgba(0, 210, 255, 0)');
+  ctx.lineTo(padding.left + (maxAge - minAge) / (maxAge - minAge) * chartW, padding.top + chartH);
+  ctx.lineTo(padding.left, padding.top + chartH);
+  ctx.closePath();
+  ctx.fillStyle = gradient;
+  ctx.fill();
+
+  // 数据点
+  data.forEach(d => {
+    let x = padding.left + (d.age - minAge) / (maxAge - minAge) * chartW;
+    let y = padding.top + chartH * (1 - d.balance / maxBalance);
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = d.phase === 'work' ? '#7b2ff7' : '#00d2ff';
+    ctx.fill();
+  });
+}
+
+// 初始化
+document.addEventListener('DOMContentLoaded', () => {
+  // 自动计算
+});
+</script>
+</body>
+</html>
