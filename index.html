@@ -505,8 +505,11 @@ function displayResult(stopAge, result, isLastResort = false) {
   if (result.ok) {
     summary = `
       <p>✅ <strong>${stopAge}岁</strong>可以停止全职工作（躺平），工作<strong>${workYears}年</strong>，攒下<strong>${formatMoney(savingsAtStop)}</strong>。</p>
-       ${ssMonthly > 0 ? '<p>🏥 社保：已交<strong>' + ssPaidYears + '</strong>年，还需<strong>' + ssRemainingYears + '</strong>年，<strong>' + ssEndAge + '</strong>岁交满。</p>' : ''}
-      <p>躺平后月净支出 <strong>${formatMoney(getNetMonthly(stopAge))}</strong>（生活费${formatMoney(monthlyExpense)}${ssMonthly > 0 ? ' + 社保' + formatMoney(ssMonthly) : ''}${partnerSSMonthly > 0 ? ' + 伴侣社保' + formatMoney(partnerSSMonthly) : ''} - 兼职${formatMoney(partTimeAnnual/12)}/月）。</p>
+      ${ssMonthly > 0 ? (stopAge >= ssEndAge ? 
+        '<p>🏥 社保：到' + stopAge + '岁已交<strong>' + (ssPaidYears + workYears) + '</strong>年，社保已交满（' + ssEndAge + '岁交满），躺平后<strong>不需要</strong>再交社保。</p>' : 
+        '<p>🏥 社保：到' + stopAge + '岁已交<strong>' + (ssPaidYears + workYears) + '</strong>年，还需交到<strong>' + ssEndAge + '</strong>岁（还需<strong>' + (ssEndAge - stopAge) + '</strong>年）。</p>'
+      ) : ''}
+      <p>躺平后月净支出 <strong>${formatMoney(getNetMonthly(stopAge))}</strong>（生活费${formatMoney(monthlyExpense)}${ssMonthly > 0 && stopAge < ssEndAge ? ' + 社保' + formatMoney(ssMonthly) : ''}${partnerSSMonthly > 0 ? ' + 伴侣社保' + formatMoney(partnerSSMonthly) : ''} - 兼职${formatMoney(partTimeAnnual/12)}/月）。</p>
       <p>从${stopAge}岁撑到${pensionAge}岁领养老金，需要${retireYears}年。届时还剩 <strong>${formatMoney(result.balance)}</strong>。</p>
       ${result.balance < 100000 ? '<p>⚠️ 余额较少，建议多工作1-2年增加安全垫。</p>' : ''}
     `;
