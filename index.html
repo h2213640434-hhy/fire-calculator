@@ -199,7 +199,7 @@ canvas { width: 100% !important; height: 100% !important; }
         <input type="number" id="childEndAge" value="15" min="1" max="30">
       </div>
       <div class="form-group">
-        <label>养娃总预算（元，参考用）</label>
+        <label>孩子出生当年一次性开销（生育/月子等，元）</label>
         <input type="number" id="childBudget" value="300000">
       </div>
       <div class="form-group">
@@ -353,10 +353,34 @@ function calculate() {
     let ok = true;
     let exhaustedAge = null;
 
-    // 阶段1：工作积累期
-    for (let m = 0; m < (stopAge - currentAge) * 12; m++) {
-      balance = balance * (1 + monthlyReturn) + monthlySave;
+    // 阶段1：工作积累期（含孩子开销）
+    const workMonths = Math.round((stopAge - currentAge) * 12);
+    const birthMonth = Math.round((childBirthAge - currentAge) * 12);
+    let workData = [];
+    let curYear = Math.floor(currentAge);
+    let yearStartBalance = balance;
+    for (let m = 0; m < workMonths; m++) {
+      const ageNow = currentAge + m / 12;
+      // 跨入新的一岁，记录上一岁的年初/年末余额
+      if (Math.floor(ageNow) !== curYear) {
+        workData.push({ age: curYear, yearStart: yearStartBalance, yearEnd: balance });
+        curYear = Math.floor(ageNow);
+        yearStartBalance = balance;
+      }
+      // 孩子每月额外开销（从出生到养到 childEndAge 岁）
+      let childCost = 0;
+      if (hasChild && childIncluded == 0 && ageNow >= childBirthAge && ageNow < childBirthAge + childEndAge) {
+        childCost = childMonthly;
+      }
+      // 孩子出生当年一次性大额支出（出生当月扣一次）
+      let birthExtra = 0;
+      if (hasChild && childBudget > 0 && m === birthMonth) {
+        birthExtra = childBudget;
+      }
+      balance = balance * (1 + monthlyReturn) + monthlySave - childCost - birthExtra;
     }
+    workData.push({ age: curYear, yearStart: yearStartBalance, yearEnd: balance });
+    const savingsAtStop = balance;
 
     // 阶段2：退休期（stopAge → pensionAge）
     for (let age = stopAge; age < pensionAge; age++) {
@@ -364,6 +388,12 @@ function calculate() {
       let yearIncome = 0;
       let yearExpense = 0;
       let events = [];
+
+      // 孩子出生当年一次性大额支出（若孩子在躺平后出生）
+      if (hasChild && childBudget > 0 && age === childBirthAge) {
+        balance -= childBudget;
+        yearExpense += childBudget;
+      }
 
       for (let m = 0; m < 12; m++) {
         let ageNow = age + m / 12;
@@ -429,7 +459,7 @@ function calculate() {
       if (!ok) break;
     }
 
-    return { ok, balance, exhaustedAge, yearlyData, finalBalance: balance };
+    return { ok, balance, exhaustedAge, yearlyData, finalBalance: balance, savingsAtStop, workData };
   }
 
   // 如果指定了目标年龄
@@ -476,8 +506,17 @@ function displayResult(stopAge, result, isLastResort = false) {
   const partnerHasSS = getChecked('partnerHasSS');
   const partnerSSMonthly = partnerHasSS ? getVal('partnerSSMonthly') : 0;
 
+  // 孩子
+  const hasChild = getChecked('hasChild');
+  const childBirthAge = getVal('childBirthAge');
+  const childEndAge = getVal('childEndAge');
+  const childBudget = getVal('childBudget');
+  const childIncluded = getVal('childIncluded');
+  const childMonthly = getVal('childMonthly');
+  const childMonthlyCost = (hasChild && childIncluded == 0) ? childMonthly : 0;
+
   // 结果卡片
-  const savingsAtStop = getRequiredSavings(stopAge);
+  const savingsAtStop = result.savingsAtStop;
   const cardsHtml = `
     <div class="result-card ${result.ok ? 'success' : 'fail'}">
       <div class="label">${result.ok ? '✅ 最早可躺平年龄' : '❌ 目标躺平年龄'}</div>
@@ -509,7 +548,8 @@ function displayResult(stopAge, result, isLastResort = false) {
         '<p>🏥 社保：到' + stopAge + '岁已交<strong>' + (ssPaidYears + workYears) + '</strong>年，社保已交满（' + ssEndAge + '岁交满），躺平后<strong>不需要</strong>再交社保。</p>' : 
         '<p>🏥 社保：到' + stopAge + '岁已交<strong>' + (ssPaidYears + workYears) + '</strong>年，还需交到<strong>' + ssEndAge + '</strong>岁（还需<strong>' + (ssEndAge - stopAge) + '</strong>年）。</p>'
       ) : ''}
-      <p>躺平后月净支出 <strong>${formatMoney(getNetMonthly(stopAge))}</strong>（生活费${formatMoney(monthlyExpense)}${ssMonthly > 0 && stopAge < ssEndAge ? ' + 社保' + formatMoney(ssMonthly) : ''}${partnerSSMonthly > 0 ? ' + 伴侣社保' + formatMoney(partnerSSMonthly) : ''} - 兼职${formatMoney(partTimeAnnual/12)}/月）。</p>
+      <p>躺平后月净支出 <strong>${formatMoney(getNetMonthly(stopAge))}</strong>（生活费${formatMoney(monthlyExpense)}${ssMonthly > 0 && stopAge < ssEndAge ? ' + 社保' + formatMoney(ssMonthly) : ''}${partnerSSMonthly > 0 ? ' + 伴侣社保' + formatMoney(partnerSSMonthly) : ''}${childMonthlyCost > 0 ? ' + 孩子' + formatMoney(childMonthlyCost) : ''} - 兼职${formatMoney(partTimeAnnual/12)}/月）。</p>
+      ${hasChild ? '<p>👶 孩子：计划 <strong>' + childBirthAge + '</strong> 岁出生，养到 <strong>' + (childBirthAge + childEndAge) + '</strong> 岁；每月额外开销 ' + formatMoney(childMonthlyCost) + (childBudget > 0 ? '，出生当年一次性 ' + formatMoney(childBudget) : '') + '（已计入计算）。</p>' : ''}
       <p>从${stopAge}岁撑到${pensionAge}岁领养老金，需要${retireYears}年。届时还剩 <strong>${formatMoney(result.balance)}</strong>。</p>
       ${result.balance < 100000 ? '<p>⚠️ 余额较少，建议多工作1-2年增加安全垫。</p>' : ''}
     `;
@@ -518,6 +558,7 @@ function displayResult(stopAge, result, isLastResort = false) {
       <p>❌ 按当前参数，<strong>${stopAge}岁</strong>停止全职工作后，无法撑到${pensionAge}岁领养老金。</p>
       <p>资金将在 <strong>${result.exhaustedAge}岁</strong> 耗尽，距离领养老金还差 <strong>${pensionAge - result.exhaustedAge}年</strong>。</p>
       <p>💡 建议：延迟躺平年龄、降低生活费、增加兼职收入、或提高投资收益率。</p>
+      ${hasChild ? '<p>👶 注：孩子开销（出生当年一次性 + 每月额外）已计入上述结果。</p>' : ''}
     `;
   }
   document.getElementById('resultCards').innerHTML = cardsHtml;
@@ -525,26 +566,19 @@ function displayResult(stopAge, result, isLastResort = false) {
 
   // 逐年表格
   let tbody = '';
-  let storeSavings = getVal('currentSavings');
-  let monthlySave = getVal('monthlySave');
-  let annualReturn = getVal('annualReturn') / 100;
-  let monthlyReturn = annualReturn / 12;
+  const monthlySave = getVal('monthlySave');
 
-  // 工作期
-  for (let age = currentAge; age < stopAge; age++) {
-    let yearStart = storeSavings;
-    for (let m = 0; m < 12; m++) {
-      storeSavings = storeSavings * (1 + monthlyReturn) + monthlySave;
-    }
+  // 工作期（含孩子开销，直接用 simulate 的结果）
+  result.workData.forEach(row => {
     tbody += `<tr class="highlight">
-      <td>${age}岁</td><td>工作</td>
-      <td>${formatMoney(yearStart)}</td>
+      <td>${row.age}岁</td><td>工作</td>
+      <td>${formatMoney(row.yearStart)}</td>
       <td class="positive">+${formatMoney(monthlySave * 12)}</td>
       <td>—</td>
-      <td>${formatMoney(storeSavings)}</td>
+      <td>${formatMoney(row.yearEnd)}</td>
       <td>💼 搞钱中</td>
     </tr>`;
-  }
+  });
 
   // 退休期
   result.yearlyData.forEach(row => {
@@ -566,18 +600,6 @@ function displayResult(stopAge, result, isLastResort = false) {
 
   // 滚动到结果
   document.getElementById('resultArea').scrollIntoView({ behavior: 'smooth' });
-}
-
-function getRequiredSavings(stopAge) {
-  const currentAge = getVal('currentAge');
-  const monthlySave = getVal('monthlySave');
-  const annualReturn = getVal('annualReturn') / 100;
-  const monthlyReturn = annualReturn / 12;
-  let total = getVal('currentSavings');
-  for (let m = 0; m < (stopAge - currentAge) * 12; m++) {
-    total = total * (1 + monthlyReturn) + monthlySave;
-  }
-  return total;
 }
 
 function getNetMonthly(stopAge) {
@@ -602,10 +624,22 @@ function getNetMonthly(stopAge) {
   const partnerSSFinishAge = partnerSSStartAge + partnerSSTotal;
   const partnerSSEndAge = partnerSSFinishAge + partnerAgeDiff;
 
+  // 孩子开销（躺平初期是否处于养娃期）
+  const hasChild = getChecked('hasChild');
+  const childIncluded = getVal('childIncluded');
+  const childBirthAge = getVal('childBirthAge');
+  const childEndAge = getVal('childEndAge');
+  const childMonthly = getVal('childMonthly');
+  let childMonthlyCost = 0;
+  if (hasChild && childIncluded == 0 && stopAge >= childBirthAge && stopAge < childBirthAge + childEndAge) {
+    childMonthlyCost = childMonthly;
+  }
+
   // 返回躺平初期的月净支出
   let net = monthlyExpense - partTimeMonthly;
   if (stopAge < ssEndAge) net += ssMonthly;
   if (partnerHasSS && stopAge < partnerSSEndAge) net += partnerSSMonthly;
+  if (childMonthlyCost > 0) net += childMonthlyCost;
   return net;
 }
 
@@ -632,22 +666,13 @@ function drawChart(stopAge, result) {
   const chartH = H - padding.top - padding.bottom;
 
   // 收集数据
-  const currentAge = getVal('currentAge');
-  const pensionAge = getVal('pensionAge');
-  const monthlySave = getVal('monthlySave');
-  const annualReturn = getVal('annualReturn') / 100;
-  const monthlyReturn = annualReturn / 12;
-
   let data = [];
-  let balance = getVal('currentSavings');
 
-  // 工作期
-  for (let age = currentAge; age <= stopAge; age++) {
-    data.push({ age, balance, phase: 'work' });
-    for (let m = 0; m < 12; m++) {
-      balance = balance * (1 + monthlyReturn) + monthlySave;
-    }
-  }
+  // 工作期（用 simulate 的结果，含孩子开销）
+  result.workData.forEach(row => {
+    data.push({ age: row.age, balance: row.yearStart, phase: 'work' });
+  });
+  data.push({ age: stopAge, balance: result.savingsAtStop, phase: 'work' });
 
   // 退休期
   result.yearlyData.forEach(row => {
